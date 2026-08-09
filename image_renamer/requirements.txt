@@ -1,0 +1,2 @@
+# Image processing 
+pillow>=12.3.0

@@ -6,6 +6,7 @@ A lightweight Python script that prints the tree structure of any directory to t
 
 - Prints directories and files as a tree with branch connectors (`├──`, `└──`, `│`)
 - Sorts entries alphabetically (directories first)
+- Ignores tool-managed directories you can't change the structure of (`.git`, `node_modules`, virtual environments, caches) — show them with `--show-ignored`
 - Save output to a `.txt` file with `-o`/`--output`
 - Uses only the Python standard library — no third-party dependencies
 
@@ -38,6 +39,9 @@ python directory_structure.py /path/to/folder
 
 # Save to a text file
 python directory_structure.py /path/to/folder -o structure.txt
+
+# Also include tool-managed directories (e.g. .git, node_modules)
+python directory_structure.py --show-ignored
 ```
 
 ## Example Output
@@ -59,5 +63,5 @@ project/
 | Language | Python 3.8+ (stdlib only) |
 | Dependencies | None (`requirements.txt` is empty) |
 | Default target | Current directory (`.` ) |
-| CLI flags | `directory` (positional), `-o`/`--output` |
+| CLI flags | `directory` (positional), `-o`/`--output`, `--show-ignored` |
 | Output | Terminal or UTF-8 text file |

@@ -2,8 +2,20 @@
 """Print the directory tree of a given path to the terminal or a file."""
 
 import argparse
+import os
+import re
 import sys
 from pathlib import Path
+
+
+def to_wsl_path(path: str) -> Path:
+    """Convert a Windows-style path (e.g. ``C:\\Users\\foo``) to a WSL path (``/mnt/c/Users/foo``)."""
+    path = path.strip()
+    drive = re.match(r"^([A-Za-z]):[\\/]?(.*)$", path)
+    if drive and os.name != "nt":
+        letter, rest = drive.groups()
+        return Path(f"/mnt/{letter.lower()}/{rest.replace(chr(92), '/')}")
+    return Path(path)
 
 # Directories whose structure is managed by tools, not the user, so they are
 # skipped by default (e.g. version control, dependencies, caches).
@@ -65,7 +77,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    lines = build_tree(Path(args.directory), show_ignored=args.show_ignored)
+    lines = build_tree(to_wsl_path(args.directory), show_ignored=args.show_ignored)
 
     if args.output:
         Path(args.output).write_text("\n".join(lines) + "\n", encoding="utf-8")

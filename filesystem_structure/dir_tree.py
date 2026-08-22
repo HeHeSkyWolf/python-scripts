@@ -24,8 +24,11 @@ def to_wsl_path(path: str) -> Path:
     """
     Convert a Windows-style path (e.g. ``C:\\Users\\foo``) to a WSL path (``/mnt/c/Users/foo``).
     
-    @param path: The Windows-style path to convert.
-    @return: The WSL path corresponding to the given Windows-style path.
+    Args:
+        path (str): The Windows-style path to convert.
+
+    Returns:
+        Path: The WSL path corresponding to the given Windows-style path.
     """
     path = path.strip()
     drive = re.match(r"^([A-Za-z]):[\\/]?(.*)$", path)
@@ -39,11 +42,14 @@ def build_tree(root: Path, show_ignored: bool = False) -> list[str]:
     """
     Return a list of lines representing the tree of `root`.
 
-    @param root: The root path to build the tree from.
-    @param show_ignored: Whether to include ignored files and directories in the tree.
-    @return: A list of lines representing the tree of the given directory. Each line is a string \
-        with the format ``<path> [<type>]`` where `<path>`` is the path to the file or directory \
-        and ``<type>`` is either ``file`` or ``dir``.
+    Args:
+        root (Path): The root path to build the tree from.
+        show_ignored (bool): Whether to include ignored files and directories in the tree.
+
+    Returns:
+        list[str]: A list of lines representing the tree of the given directory. Each line is a string \
+            with the format ``<path> [<type>]`` where `<path>`` is the path to the file or directory \
+            and ``<type>`` is either ``file`` or ``dir``.
     """
     root = Path(root).resolve()
     if not root.exists():
@@ -63,9 +69,12 @@ def _children(path: Path, show_ignored: bool = False) -> list[Path]:
     Return a sorted list of children paths for the given directory.
     If `show_ignored` is True, include ignored directories; otherwise, exclude them.
 
-    @param path: Path object representing the directory to be processed.
-    @param show_ignored: Boolean indicating whether to include ignored directories.
-    @return: List of Path objects representing the children paths.
+    Args:
+        path (Path): Path object representing the directory to be processed.
+        show_ignored (bool): Boolean indicating whether to include ignored directories.
+
+    Returns:
+        list[Path]: List of Path objects representing the children paths.
     """
     return [
         p
@@ -81,12 +90,15 @@ def _walk(path: Path, prefix: str, is_last: bool = True, show_ignored: bool = Fa
     The `prefix` parameter helps in maintaining the visual hierarchy of the tree.
     If `is_last` is True, use '└──' to indicate the last child; otherwise, use '├──'.
     
-    @param path: Path object representing the current directory.
-    @param prefix: String representing the current level of the tree.
-    @param is_last: Boolean indicating whether the current directory is the last child \
-        in its parent.
-    @param show_ignored: Boolean indicating whether to include ignored directories.
-    @return: List of strings representing the lines of the tree structure.
+    Args:
+        path (Path): Path object representing the current directory.
+        prefix (str): String representing the current level of the tree.
+        is_last (bool): Boolean indicating whether the current directory is the last child \
+            in its parent.
+        show_ignored (bool): Boolean indicating whether to include ignored directories.
+    
+    Returns:
+        list[str]: List of strings representing the lines of the tree structure.
     """
     connector = "└── " if is_last else "├── "
     lines = [f"{prefix}{connector}{path.name}{'/' if path.is_dir() else ''}"]

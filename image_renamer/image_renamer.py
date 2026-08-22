@@ -13,13 +13,29 @@ from PIL.ExifTags import TAGS
 
 
 def is_wsl_path(path):
-    """Check if path is a WSL mount path"""
+    """
+    Check if path is a WSL mount path
+    
+    Args:
+       path (Path): Path to check
+
+    Returns:
+      bool: True if path is a WSL mount path, False otherwise
+    """
     path_str = str(path)
     return path_str.startswith('/mnt/') or path_str.startswith('//wsl/')
 
 
 def get_windows_path(wsl_path):
-    """Convert WSL path to Windows path (for display purposes)"""
+    """
+    Convert WSL path to Windows path (for display purposes)
+    
+    Args:
+        wsl_path (Path): WSL path to convert
+
+    Returns:
+        str: Corresponding Windows path
+    """
     wsl_path = str(wsl_path)
     if wsl_path.startswith('/mnt/'):
         # /mnt/c/Users -> C:\Users
@@ -30,7 +46,16 @@ def get_windows_path(wsl_path):
 
 
 def safe_rename(src, dst):
-    """Safe rename function that handles cross-device moves"""
+    """
+    Safe rename function that handles cross-device moves
+    
+    Args:
+        src (Path): The source path.
+        dst (Path): The destination path.
+
+    Returns:
+        bool: True if the rename was successful, False otherwise.
+    """
     try:
         os.rename(src, dst)
         return True
@@ -40,7 +65,16 @@ def safe_rename(src, dst):
 
 
 def get_image_date(file_path, use_exif=True):
-    """Extract date from image metadata"""
+    """
+    Extract date from image metadata
+
+    Args:
+        file_path (Path): Path to the image file.
+        use_exif (bool): Whether to use EXIF data for date extraction.
+
+    Returns:
+        datetime: The extracted date, or None if no valid date is found.
+    """
     # Implementation same as before...
     if use_exif:
         try:
@@ -70,7 +104,18 @@ def get_image_date(file_path, use_exif=True):
 def process_directory(directory, recursive=False, use_exif=True, 
                      prefix="", suffix="", dry_run=False,
                      image_extensions=None):
-    """Process images with Windows-specific improvements"""
+    """
+    Process images with Windows-specific improvements
+    
+    Args:
+        directory (str): The directory to process.
+        recursive (bool): Whether to process subdirectories recursively.
+        use_exif (bool): Whether to use EXIF data for date extraction.
+        prefix (str): Prefix for the new filenames.
+        suffix (str): Suffix for the new filenames.
+        dry_run (bool): Whether to perform a dry run without actually renaming files.
+        image_extensions (set): Set of image file extensions to process.
+    """
     
     if image_extensions is None:
         image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', 

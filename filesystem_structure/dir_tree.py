@@ -36,7 +36,15 @@ def to_wsl_path(path: str) -> Path:
 
 
 def build_tree(root: Path, show_ignored: bool = False) -> list[str]:
-    """Return a list of lines representing the tree of ``root``."""
+    """
+    Return a list of lines representing the tree of `root`.
+
+    @param root: The root path to build the tree from.
+    @param show_ignored: Whether to include ignored files and directories in the tree.
+    @return: A list of lines representing the tree of the given directory. Each line is a string \
+        with the format ``<path> [<type>]`` where `<path>`` is the path to the file or directory \
+        and ``<type>`` is either ``file`` or ``dir``.
+    """
     root = Path(root).resolve()
     if not root.exists():
         sys.exit(f"Error: path does not exist: {root}")
@@ -68,13 +76,15 @@ def _children(path: Path, show_ignored: bool = False) -> list[Path]:
 
 def _walk(path: Path, prefix: str, is_last: bool = True, show_ignored: bool = False) -> list[str]:
     """
-    Recursively walk through the directory tree starting from `path`, building a list of lines representing the tree structure.
+    Recursively walk through the directory tree starting from `path`, building a list of lines 
+    representing the tree structure.
     The `prefix` parameter helps in maintaining the visual hierarchy of the tree.
     If `is_last` is True, use '└──' to indicate the last child; otherwise, use '├──'.
     
     @param path: Path object representing the current directory.
     @param prefix: String representing the current level of the tree.
-    @param is_last: Boolean indicating whether the current directory is the last child in its parent.
+    @param is_last: Boolean indicating whether the current directory is the last child \
+        in its parent.
     @param show_ignored: Boolean indicating whether to include ignored directories.
     @return: List of strings representing the lines of the tree structure.
     """
@@ -91,15 +101,15 @@ def _walk(path: Path, prefix: str, is_last: bool = True, show_ignored: bool = Fa
 def main() -> None:
     """
     Main function to parse command-line arguments and print or save the directory tree structure.
-    
-    @return: None
     """
     parser = argparse.ArgumentParser(
         description="Print the directory structure of a given path."
     )
-    parser.add_argument("directory", nargs="?", default=".", help="Directory to scan (default: current directory)")
+    parser.add_argument("directory", nargs="?", default=".", \
+                        help="Directory to scan (default: current directory)")
     parser.add_argument(
-        "-o", "--output", metavar="FILE", help="Write the structure to a text file instead of the terminal"
+        "-o", "--output", metavar="FILE", \
+            help="Write the structure to a text file instead of the terminal"
     )
     parser.add_argument(
         "--show-ignored", action="store_true",
@@ -118,4 +128,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

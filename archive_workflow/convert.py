@@ -1,3 +1,10 @@
+"""Archive-to-MDX conversion utilities.
+
+This module parses archived 7k7k news article pages, localizes their image
+references, and serializes them into MDX documents with YAML front matter. It
+supports plain, rich-text, and fully styled output modes.
+"""
+
 import argparse
 import hashlib
 import re
@@ -42,17 +49,45 @@ FONT_NAMES = {
 
 
 def yaml_quote(value: str) -> str:
+    """Format a string as a double-quoted YAML scalar.
+
+    Args:
+        value: The raw string to escape.
+
+    Returns:
+        The escaped string enclosed in double quotes.
+    """
     value = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{value}"'
 
 
 def clean_text(text: str) -> str:
+    """Normalize text for downstream HTML processing.
+
+    Non-breaking spaces are converted to regular spaces, runs of whitespace
+    are collapsed to a single space, and the result is stripped.
+
+    Args:
+        text: The text to normalize.
+
+    Returns:
+        The normalized text.
+    """
     text = text.replace("\xa0", " ")
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
 def meta_from_span(span: Tag) -> tuple[str, str]:
+    """Extract publication metadata from a header span.
+
+    Args:
+        span: The span expected to contain the publish date and editor.
+
+    Returns:
+        A ``(publish_date, editor)`` tuple, or ``("", "")`` when the span does
+        not match the expected format.
+    """
     text = clean_text(span.get_text())
     match = re.search(r"发布时间：\s*(.*?)\s*责任编辑：\s*(.*)", text)
     if not match:
@@ -61,6 +96,15 @@ def meta_from_span(span: Tag) -> tuple[str, str]:
 
 
 def nav_from_span(span: Tag | None) -> tuple[str, str]:
+    """Extract a previous or next navigation link from a span.
+
+    Args:
+        span: The navigation span, or ``None`` when the link is absent.
+
+    Returns:
+        A ``(route, title)`` tuple. The route is an empty string when the href
+        does not contain an article id, while the title may still be set.
+    """
     if span is None:
         return "", ""
     link = span.find("a", href=True)
@@ -75,6 +119,15 @@ def nav_from_span(span: Tag | None) -> tuple[str, str]:
 
 
 def image_files(images_dir: Path) -> list[str]:
+    """List the image files available for an article.
+
+    Args:
+        images_dir: Directory containing the article's downloaded images.
+
+    Returns:
+        Sorted image filenames whose extensions are supported, or an empty
+        list when the directory does not exist.
+    """
     if not images_dir.is_dir():
         return []
     return sorted(
@@ -84,6 +137,16 @@ def image_files(images_dir: Path) -> list[str]:
 
 
 def read_archive_url(article_dir: Path, override: str) -> str:
+    """Resolve the archive URL for an article.
+
+    Args:
+        article_dir: Directory of the article being converted.
+        override: Explicit URL that takes precedence over the sidecar file.
+
+    Returns:
+        The override when provided, otherwise the contents of
+        ``archive-url.txt``, or an empty string when neither is available.
+    """
     if override:
         return override
     sidecar = article_dir / "archive-url.txt"
@@ -93,6 +156,19 @@ def read_archive_url(article_dir: Path, override: str) -> str:
 
 
 def parse_style(style: str) -> list[tuple[str, str]]:
+    """Parse an inline CSS style attribute.
+
+    Declarations are normalized by removing surrounding whitespace, unescaping
+    quotes, lowercasing property names, and sorting the result for stable
+    class generation.
+
+    Args:
+        style: The raw value of a ``style`` attribute.
+
+    Returns:
+        A sorted list of ``(property, value)`` pairs. Malformed declarations
+        are ignored.
+    """
     declarations: list[tuple[str, str]] = []
     for part in style.split(";"):
         if ":" not in part:
@@ -107,15 +183,40 @@ def parse_style(style: str) -> list[tuple[str, str]]:
 
 
 def sanitize_token(value: str) -> str:
+    """Convert arbitrary text into a CSS-safe identifier fragment.
+
+    Args:
+        value: The text to convert.
+
+    Returns:
+        A lowercase token containing only letters, digits, and hyphens.
+    """
     return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
 
 
 def font_token(value: str) -> str:
+    """Map a CSS font stack to a short class token.
+
+    Args:
+        value: A CSS ``font-family`` value.
+
+    Returns:
+        A known token for recognized fonts, otherwise a sanitized version of
+        the first family name, or ``"custom"`` when it cannot be sanitized.
+    """
     first = value.split(",")[0].strip().strip("'\"")
     return FONT_NAMES.get(first.lower(), sanitize_token(first) or "custom")
 
 
 def style_tokens(declarations: list[tuple[str, str]]) -> list[str]:
+    """Convert CSS declarations into human-readable class tokens.
+
+    Args:
+        declarations: Normalized ``(property, value)`` pairs.
+
+    Returns:
+        A de-duplicated list of class tokens describing the declarations.
+    """
     tokens: list[str] = []
     for prop, value in declarations:
         lower = value.lower()
@@ -154,12 +255,33 @@ def style_tokens(declarations: list[tuple[str, str]]) -> list[str]:
 
 
 class StyleRegistry:
+    """Registry that deduplicates inline styles and generates CSS classes.
+
+    Attributes:
+        rules: Maps declaration tuples to their generated class name and CSS.
+        used: Class names that have already been assigned.
+        indent_used: Whether the shared ``news-indent`` class is required.
+    """
+
     def __init__(self) -> None:
+        """Initialize an empty style registry.
+
+        The registry starts with no rules, no assigned class names, and the
+        indentation helper disabled.
+        """
         self.rules: dict[tuple[tuple[str, str], ...], tuple[str, str]] = {}
         self.used: set[str] = set()
         self.indent_used = False
 
     def class_for(self, declarations: list[tuple[str, str]]) -> str:
+        """Get or create the class name for a set of CSS declarations.
+
+        Args:
+            declarations: Normalized ``(property, value)`` pairs.
+
+        Returns:
+            A unique class name that represents the declarations.
+        """
         key = tuple(declarations)
         if key in self.rules:
             return self.rules[key][0]
@@ -181,6 +303,12 @@ class StyleRegistry:
         return name
 
     def css(self) -> str:
+        """Render the accumulated stylesheet.
+
+        Returns:
+            The CSS rules joined by newlines, including the indentation helper
+            when it has been used. Returns an empty string when no rules exist.
+        """
         lines = [
             f".{name} {{ {css} }}" for name, css in self.rules.values()
         ]
@@ -190,7 +318,19 @@ class StyleRegistry:
 
 
 def localize_content(con: Tag, soup: BeautifulSoup, files: list[str], image_url) -> None:
-    """Keep original markup, but point images at the local archive."""
+    """Localize images and remove unsafe content from an article body.
+
+    The original markup is retained. Existing images are relabeled and pointed
+    at the local archive, local images that were not referenced are appended,
+    comments and script or style tags are removed, and event handler
+    attributes are stripped.
+
+    Args:
+        con: The article content element to modify in place.
+        soup: The soup that owns ``con``, used to create new elements.
+        files: Local image filenames assigned to images in document order.
+        image_url: Callable mapping an image filename to its public URL.
+    """
     for comment in con.find_all(string=lambda s: isinstance(s, Comment)):
         comment.extract()
     for tag in con.find_all(["script", "style"]):
@@ -245,13 +385,26 @@ def localize_content(con: Tag, soup: BeautifulSoup, files: list[str], image_url)
 
 
 def rewrite_link_hrefs(con: Tag) -> None:
-    """Move ``<a href>`` to ``data-original-url`` so links stay inert."""
+    """Make links inert by moving their target into a data attribute.
+
+    Args:
+        con: The article content element to modify in place.
+    """
     for link in con.find_all("a", href=True):
         link["data-original-url"] = link["href"]
         del link["href"]
 
 
 def clean_blocks(con: Tag, title: str) -> None:
+    """Remove redundant blocks from an article body.
+
+    A paragraph that duplicates the article title is removed, along with all
+    block elements that contain neither text nor an image.
+
+    Args:
+        con: The article content element to modify in place.
+        title: The article title used to detect the duplicate paragraph.
+    """
     compact_title = re.sub(r"\s+", "", title)
     for paragraph in con.find_all("p"):
         if re.sub(r"\s+", "", paragraph.get_text()) == compact_title:
@@ -266,7 +419,14 @@ def clean_blocks(con: Tag, title: str) -> None:
 
 
 def strip_block_edges(block: Tag) -> None:
-    """Remove leading/trailing whitespace and line breaks inside a block."""
+    """Trim whitespace and line breaks at the edges of a block.
+
+    Leading and trailing whitespace-only text nodes and ``<br>`` elements are
+    removed, and empty inline tags are discarded.
+
+    Args:
+        block: The block element to modify in place.
+    """
     for node in list(block.descendants):
         if isinstance(node, NavigableString):
             text = str(node)
@@ -301,6 +461,14 @@ def strip_block_edges(block: Tag) -> None:
 
 
 def strip_all_block_edges(con: Tag) -> None:
+    """Trim block edges throughout the article body.
+
+    Only leaf ``p`` and ``div`` elements are processed so nested structures are
+    not modified twice.
+
+    Args:
+        con: The article content element to modify in place.
+    """
     for block in con.find_all(["p", "div"]):
         if block.find(["p", "div"]):
             continue
@@ -308,7 +476,21 @@ def strip_all_block_edges(con: Tag) -> None:
 
 
 def prepare_rich(con: Tag, registry: StyleRegistry) -> bool:
-    """Keep only bold and text color from the original inline markup."""
+    """Reduce inline markup to bold text and text colors.
+
+    Inline styles are inspected, bold declarations become ``<strong>`` tags,
+    colors are registered as CSS classes, and all unrelated attributes and
+    styles are removed. ``<font color>`` attributes are converted to styles
+    first so they follow the same path.
+
+    Args:
+        con: The article content element to modify in place.
+        registry: Registry used to generate classes for color declarations.
+
+    Returns:
+        ``True`` when at least one color class was applied, otherwise
+        ``False``.
+    """
     used_color = False
 
     for tag in con.find_all(True):
@@ -368,7 +550,21 @@ def prepare_rich(con: Tag, registry: StyleRegistry) -> bool:
 
 
 def plain_block(soup: BeautifulSoup, block: Tag, rich: bool = False) -> list[str]:
-    """Flatten one block to paragraphs, keeping text, links, images, and rich text."""
+    """Flatten a single block into one or more paragraph fragments.
+
+    Inline tags are unwrapped unless they are allowed in the current mode,
+    images are emitted as standalone paragraphs, and text is split at ``<br>``
+    boundaries.
+
+    Args:
+        soup: The soup that owns the content, used to create new elements.
+        block: The block element to flatten.
+        rich: Whether to keep bold text and text colors in addition to plain
+            content.
+
+    Returns:
+        A list of serialized ``<p>`` fragments, possibly empty.
+    """
     fragment = BeautifulSoup(str(block), "html.parser")
     root = fragment.find(block.name)
     if root is None:
@@ -379,6 +575,14 @@ def plain_block(soup: BeautifulSoup, block: Tag, rich: bool = False) -> list[str
     keep = KEEP_RICH if rich else KEEP_PLAIN
 
     def keep_tag(node: Tag) -> bool:
+        """Determine whether an inline tag should be kept during flattening.
+
+        Args:
+            node: The tag being considered.
+
+        Returns:
+            ``True`` when the tag is allowed in the active output mode.
+        """
         if node.name in keep:
             return True
         if rich and node.name == "span":
@@ -438,6 +642,20 @@ def plain_block(soup: BeautifulSoup, block: Tag, rich: bool = False) -> list[str
 
 
 def serialize_plain(con: Tag, soup: BeautifulSoup, rich: bool = False) -> str:
+    """Serialize the article body as plain paragraphs.
+
+    Direct text children become paragraphs, and each child block is flattened
+    through :func:`plain_block`. Brace characters are escaped because the
+    output is MDX.
+
+    Args:
+        con: The article content element to serialize.
+        soup: The soup that owns the content, used to create new elements.
+        rich: Whether to retain bold text and text colors.
+
+    Returns:
+        The serialized body with escaped MDX braces.
+    """
     blocks: list[str] = []
     for child in con.children:
         if isinstance(child, NavigableString):
@@ -451,6 +669,14 @@ def serialize_plain(con: Tag, soup: BeautifulSoup, rich: bool = False) -> str:
 
 
 def copy_attrs(tag: Tag) -> dict:
+    """Copy a tag's attributes without sharing mutable list values.
+
+    Args:
+        tag: The tag whose attributes should be copied.
+
+    Returns:
+        A shallow copy of the attribute mapping where list values are cloned.
+    """
     return {
         key: (list(value) if isinstance(value, list) else value)
         for key, value in tag.attrs.items()
@@ -458,7 +684,20 @@ def copy_attrs(tag: Tag) -> dict:
 
 
 def split_fragments(soup: BeautifulSoup, nodes: list, split_images: bool = False) -> list[list[Tag]]:
-    """Split nodes at <br> (and optionally images), cloning spanning inline tags."""
+    """Split nodes into fragments at line breaks or images.
+
+    Inline tags that span a split point are cloned for each fragment so that
+    formatting is preserved. Consumed nodes are extracted from their original
+    parent.
+
+    Args:
+        soup: The soup used to create cloned tags.
+        nodes: The nodes to split.
+        split_images: Whether images should start their own fragment.
+
+    Returns:
+        A list of fragments, each containing the nodes belonging to it.
+    """
     segments: list[list[Tag]] = [[]]
     for node in list(nodes):
         if isinstance(node, Tag):
@@ -489,7 +728,12 @@ def split_fragments(soup: BeautifulSoup, nodes: list, split_images: bool = False
 
 
 def split_br_blocks(con: Tag, soup: BeautifulSoup) -> None:
-    """Turn every <br> inside a text block into a separate paragraph."""
+    """Split text blocks into paragraphs at every ``<br>``.
+
+    Args:
+        con: The article content element to modify in place.
+        soup: The soup used to create the new paragraph elements.
+    """
     for tag in reversed(con.find_all(["p", "div"])):
         if tag.find(["p", "div"]):
             continue
@@ -511,7 +755,19 @@ def split_br_blocks(con: Tag, soup: BeautifulSoup) -> None:
 
 
 def apply_indentation(con: Tag, registry: StyleRegistry) -> bool:
-    """Turn the original leading ``&nbsp;`` indentation into CSS text-indent."""
+    """Convert leading non-breaking-space indentation into a CSS class.
+
+    Blocks whose first text node starts with whitespace are stripped and
+    tagged with ``news-indent`` so the indentation can be expressed with
+    ``text-indent`` instead of literal spaces.
+
+    Args:
+        con: The article content element to modify in place.
+        registry: Registry that records whether the indent class is needed.
+
+    Returns:
+        ``True`` when at least one block was indented, otherwise ``False``.
+    """
     changed = False
     for block in con.find_all(["p", "div"]):
         if block.find([name for name in BLOCK_TAGS if name != block.name]):
@@ -559,7 +815,15 @@ def apply_indentation(con: Tag, registry: StyleRegistry) -> bool:
 
 
 def extract_styles(con: Tag, registry: StyleRegistry) -> bool:
-    """Replace inline styles with generated classes; return whether any exist."""
+    """Replace inline styles with generated CSS classes.
+
+    Args:
+        con: The article content element to modify in place.
+        registry: Registry used to create and deduplicate the classes.
+
+    Returns:
+        ``True`` when at least one style was converted, otherwise ``False``.
+    """
     used = False
     for tag in con.find_all(True):
         style = tag.get("style")
@@ -586,6 +850,17 @@ def extract_styles(con: Tag, registry: StyleRegistry) -> bool:
 
 
 def serialize_content(con: Tag) -> str:
+    """Serialize the article body while preserving block markup.
+
+    Direct text children become paragraphs and child tags are emitted as-is.
+    Brace characters are escaped because the output is MDX.
+
+    Args:
+        con: The article content element to serialize.
+
+    Returns:
+        The serialized body with escaped MDX braces.
+    """
     blocks: list[str] = []
     for child in con.children:
         if isinstance(child, NavigableString):
@@ -607,6 +882,31 @@ def convert_article(
     styled: bool,
     rich: bool,
 ) -> tuple[str, bool] | None:
+    """Convert one archived article directory into MDX.
+
+    The article body is cleaned, image references are localized, links are made
+    inert, and blocks are normalized according to the selected output mode. The
+    resulting document includes YAML front matter built from page metadata and
+    optional sidecar files.
+
+    Args:
+        article_dir: Directory containing the article's ``index.html``.
+        root: Archive root that holds the ``contents`` and ``images`` trees.
+        relative_images: Whether to emit relative rather than root-relative
+            image paths.
+        archive_override: Archive URL used instead of the sidecar file.
+        registry: Shared style registry used to collect CSS classes.
+        styled: Whether to preserve the original markup and inline styles as
+            generated classes.
+        rich: Whether to keep only bold text and colors on top of the plain
+            output.
+
+    Returns:
+        A ``(document, uses_styles)`` tuple, where ``document`` is the complete
+        MDX text and ``uses_styles`` indicates whether the body needs the
+        generated stylesheet. ``None`` is returned when the article directory
+        has no ``index.html`` or no ``div.con`` content element.
+    """
     html_path = article_dir / "index.html"
     if not html_path.is_file():
         return None
@@ -652,6 +952,14 @@ def convert_article(
         prefix = f"/{ASSET_PREFIX}"
 
     def image_url(filename: str) -> str:
+        """Build the public URL of an image belonging to this article.
+
+        Args:
+            filename: The image filename.
+
+        Returns:
+            The URL path for the image.
+        """
         return f"{prefix}/{date}/{article_id}/{filename}"
 
     files = image_files(root / "images" / date / article_id)
@@ -701,6 +1009,16 @@ def convert_article(
 
 
 def display_path(path: Path, root: Path) -> str:
+    """Render a path relative to the archive root when possible.
+
+    Args:
+        path: The path to display.
+        root: The root against which to relativize ``path``.
+
+    Returns:
+        ``path`` relative to ``root``, or the original path string when it is
+        outside ``root``.
+    """
     try:
         return str(path.relative_to(root))
     except ValueError:
@@ -708,6 +1026,12 @@ def display_path(path: Path, root: Path) -> str:
 
 
 def main() -> None:
+    """Run the command-line archive conversion workflow.
+
+    Parses command-line options, discovers article directories, converts each
+    selected article, and writes the MDX output, generated CSS, and status
+    messages. In dry-run mode no files are modified.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--out", type=Path, default=Path("mdx"),

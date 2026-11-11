@@ -1,3 +1,11 @@
+"""Utilities for organizing downloaded archive files.
+
+This module moves HTML, text, and image files from the current directory into
+a raw archive tree. Content files are placed in ``raw/contents`` and image files
+in ``raw/images``, preserving their relative paths so that the converter can
+associate each article with its images.
+"""
+
 import argparse
 import shutil
 from pathlib import Path
@@ -10,6 +18,13 @@ SKIP_FILES = {"requirements.txt"}
 
 
 def main():
+    """Move downloaded files into the raw archive tree.
+
+    Scans the current directory recursively, moves HTML and text files into
+    ``raw/contents`` and image files into ``raw/images``, and reports how many
+    files were moved or skipped. Existing destinations are never overwritten,
+    and no files are modified when dry-run mode is enabled.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--dry-run",

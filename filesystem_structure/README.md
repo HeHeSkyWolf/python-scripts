@@ -1,5 +1,7 @@
 # Directory Structure Printer
 
+[中文文档](README.zh-CN.md)
+
 A lightweight Python script that prints the tree structure of any directory to the terminal, or saves it to a text file.
 
 ## Features

@@ -240,6 +240,11 @@ def process_directory(directory, recursive=False, use_exif=True,
 
 
 def main():
+    """Parse command-line arguments and rename images in the target directory.
+
+    Validates the provided extensions, then delegates the actual work to
+    :func:`process_directory` using the parsed options.
+    """
     parser = argparse.ArgumentParser(
         description="Rename images by date (works with WSL↔Windows)",
         formatter_class=argparse.RawDescriptionHelpFormatter,

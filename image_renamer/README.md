@@ -1,5 +1,7 @@
 # Image Renamer
 
+[中文文档](README.zh-CN.md)
+
 Single-file Python script that renames image files by EXIF date (with WSL support).
 
 ## Setup
